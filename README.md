@@ -1,6 +1,6 @@
 # PlainDB - A Simple PHP Text-File Database
 
-PlainDB is a lightweight, file-based database system inspired by the Convex database, implemented using PHP and JSON text files. It mimics basic database operations like insert, query, update, and delete, storing data in JSON files within a `data/` directory. This project is designed for small-scale applications where a full database like MySQL or SQLite is overkill, but it lacks the scalability, concurrency, and real-time features of Convex.
+PlainDB is a lightweight, file-based database system inspired by the Convex database, implemented using PHP and JSON text files. It mimics basic database operations like insert, query, update, and delete, storing data in JSON files within a `data/` directory. This project is designed for small-scale applications where a full database is not available or is overkill.
 
 ## Features
 - **Document Storage**: Stores data as JSON documents in text files, with one file per "table" (e.g., `users.json`, `posts.json`).
@@ -26,7 +26,7 @@ PlainDB is a lightweight, file-based database system inspired by the Convex data
 ### Setup
 1. **Clone the Repository**:
    ```bash
-   git clone https://github.com/yourusername/plaindb.git
+   git clone https://github.com/nodws/plaindb.git
    cd plaindb
    ```
 
@@ -51,9 +51,11 @@ PlainDB is a lightweight, file-based database system inspired by the Convex data
 plaindb/
 ├── data/
 │   ├── schema.json       // Defines tables and field types
-│   ├── users.json       // Example table for user data
-│   ├── posts.json       // Example table for post data
-├── database.php         // Core PlainDB class
+│   ├── ids.json         // Tracks last used ID per table
+│   ├── users.json       // Table for user data
+│   ├── posts.json       // Table for post data
+│   ├── error.log        // Error log file
+├── pdb.php         // Core PlainDB class
 ├── tests.php            // Example usage script
 ├── README.md            // This file
 ```
@@ -62,42 +64,66 @@ plaindb/
 The `PlainDB` class provides methods to interact with the database. Below is an example from `tests.php`:
 
 ```php
-require_once 'database.php';
+require_once 'pdb.php';
 
 try {
     $db = new PlainDB();
 
-    // Insert a new user
-    $userId = $db->insert('users', [
+    // Insert multiple users to test auto-incremental IDs
+    echo "Attempting to insert users...\n";
+    $userId1 = $db->insert('users', [
         'name' => 'John Doe',
-        'email' => 'john@example.com'
+        'email' => 'john@example.com',
+        'age' => 30
     ]);
+    echo "Inserted user with ID: $userId1\n";
 
-    // Insert a new post
+    $userId2 = $db->insert('users', [
+        'name' => 'Jane Smith',
+        'email' => 'jane@example.com',
+        'age' => 25
+    ]);
+    echo "Inserted user with ID: $userId2\n";
+
+    // Verify users.json content
+    $users = $db->query('users');
+    echo "Content of users.json:\n";
+    print_r($users);
+
+    // Insert a post
+    echo "Attempting to insert post...\n";
     $postId = $db->insert('posts', [
         'title' => 'My First Post',
         'body' => 'This is a test post.',
-        'author' => $userId
+        'author' => $userId1
     ]);
+    echo "Inserted post with ID: $postId\n";
 
-    // Query all users
-    $users = $db->query('users');
-    print_r($users);
+    // Test query filtering
+    echo "Querying users with age > 25:\n";
+    $filteredUsers = $db->query('users', ['age' => ['gt' => 25]]);
+    print_r($filteredUsers);
 
-    // Get a single user
-    $user = $db->get('users', $userId);
-    print_r($user);
+    // Delete a user to test ID persistence
+    echo "Deleting user with ID: $userId1...\n";
+    $db->delete('users', $userId1);
+    echo "All users after deletion:\n";
+    print_r($db->query('users'));
 
-    // Update a post
-    $db->patch('posts', $postId, ['body' => 'Updated post content.']);
-    print_r($db->get('posts', $postId));
-
-    // Delete a user
-    $db->delete('users', $userId);
+    // Insert another user to verify ID increment
+    echo "Inserting new user after deletion...\n";
+    $userId3 = $db->insert('users', [
+        'name' => 'Alice Brown',
+        'email' => 'alice@example.com',
+        'age' => 28
+    ]);
+    echo "Inserted new user with ID: $userId3\n";
+    echo "All users after new insert:\n";
     print_r($db->query('users'));
 
 } catch (Exception $e) {
-    echo "Error: " . $e->getMessage();
+    echo "Error: " . $e->getMessage() . "\n";
+    echo "Check data/error.log for details.\n";
 }
 ```
 
@@ -107,15 +133,18 @@ try {
   "tables": {
     "users": {
       "fields": {
+        "id": "integer",
         "name": "string",
-        "email": "string"
+        "email": "string",
+        "age": "integer"
       }
     },
     "posts": {
       "fields": {
+        "id": "integer",
         "title": "string",
         "body": "string",
-        "author": "string"
+        "author": "integer"
       }
     }
   }
@@ -125,8 +154,7 @@ try {
 ## ToDo List
 Here are suggested improvements to enhance PlainDB:
 
-- [ ] **Add Query Filtering**: Implement a `query` method with basic filtering (e.g., `where` clause) to search by field values, mimicking Convex’s query capabilities.
-- [ ] **Support Relations**: Add support for simple document relations (e.g., linking `posts.author` to `users._id`) using foreign key-like references.
+- [ ] **Support Relations**: Add support for simple document relations (e.g., linking `posts.author` to `users.id`) using foreign key-like references.
 - [ ] **Improve Schema Validation**: Support more complex types (e.g., arrays, nested objects) and optional fields, similar to Convex’s schema system.
 - [ ] **Transaction Log**: Implement a transaction log file to track changes and enable rollback, simulating Convex’s durability.
 - [ ] **Basic Authentication**: Add user authentication (e.g., via PHP sessions or JWT) to restrict database access.
